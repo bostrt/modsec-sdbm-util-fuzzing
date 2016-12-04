@@ -21,5 +21,7 @@ fi
 
 for pid in $(coredumpctl list --no-pager | tail -n $1 | awk '{print $5}');
 do
-  coredumpctl info $pid
-done | grep -i '#0'
+  warn PID:$pid
+  # Find first frame and remove leading whitespace
+  coredumpctl info $pid | grep -i '#0' | sed 's/^\s\+//'
+done
