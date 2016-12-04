@@ -1,7 +1,7 @@
 #!/bin/bash
 PROJECT=$(dirname $0)
 FUZZINGLOG=$PROJECT/results/fuzzing.log
-OPTSTRING=":d:h:s:va:"
+OPTSTRING=":d:hs:va:"
 DATAFILE="$PROJECT/data/data"
 RANGE="100-200"
 ACTION="dump"
@@ -10,7 +10,9 @@ VERBOSE=0
 source $PROJECT/include.sh
 
 printhelp() {
-  info "$0 -d data"
+  info "$0 -d data -s NUM-NUM -a ACTION"
+  info "NUM-NUM: Number range for seed (e.g. 2000-2500)"
+  info "ACTION: The modsec-sdbm-util action to test (e.g. dump, expired, shrink, extract, status)"
 }
 
 # Make sure zzuf is installed
