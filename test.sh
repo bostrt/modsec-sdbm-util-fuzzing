@@ -1,18 +1,76 @@
 #!/bin/bash
 PROJECT=$(dirname $0)
-red=$'\e[1;31m'
-grn=$'\e[1;32m'
-yel=$'\e[1;33m'
-cyn=$'\e[1;36m'
-end=$'\e[0m'
+FUZZINGLOG=$PROJECT/results/fuzzing.log
+OPTSTRING=":d:h:s:va:"
+DATAFILE="$PROJECT/data/data"
+RANGE="100-200"
+ACTION="dump"
+VERBOSE=0
 
+source $PROJECT/include.sh
+
+printhelp() {
+  info "$0 -d data"
+}
+
+# Make sure zzuf is installed
 if ! which zzuf &>/dev/null; then
   echo "${red}Please install zzuf or make sure it exists on PATH.${end}"
   exit 1
 fi
 
+# Parse args
+while getopts $OPTSTRING opt; do
+  case $opt in
+    a)
+      ACTION=$OPTARG
+      ;;
+    d)
+      DATAFILE=$(echo $OPTARG | sed 's/\.dir\|\.pag//')
+      ;;
+    h)
+      printhelp
+      exit 0
+      ;;
+    s)
+      if ! [[ $OPTARG =~ $numrangere ]]; then
+        error "Seed range ($opt) option must be in format: ###-###"
+        exit 2
+      fi
+      RANGE=$OPTARG
+      ;;
+    v)
+      VERBOSE=1
+      ;;
+    :)
+      error "Missing option for -$OPTARG"
+      exit 1
+      ;;
+    *)
+      error "Invalid options: -$OPTARG"
+      ;;
+  esac
+done
+
+# Validate action
+case $ACTION in
+  dump);;
+  expired);;
+  shrink);;
+  extract);;
+  status);;
+  *)
+    error "\"$ACTION\" is not a valid action."
+    exit 3;;
+esac
+
+if [[ ! -e "$DATAFILE.pag" ]] || [[ ! -e "$DATAFILE.dir" ]]; then
+  error "${red}Starter data is required. Please create database in $DATAFILE.{pag,dir}${end}"
+  exit 1
+fi
+
 if [[ ! -e "$PROJECT/modsec-sdbm-util/modsec-sdbm-util" ]]; then
-  echo -e "${yel}Building modsec-sdbm-util${end}"
+  warn "${yel}Building modsec-sdbm-util${end}"
   pushd . &> /dev/null
   cd $PROJECT/modsec-sdbm-util
   ./autogen.sh &> /dev/null
@@ -20,30 +78,100 @@ if [[ ! -e "$PROJECT/modsec-sdbm-util/modsec-sdbm-util" ]]; then
   make &> /dev/null
   popd &> /dev/null
   if [[ ! -e "$PROJECT/modsec-sdbm-util/modsec-sdbm-util" ]]; then
-    echo -e "${red}Error while building modsec-sdbm-util. Please investigate why build could not complete.${end}"
+    error "${red}Error while building modsec-sdbm-util. Please investigate why build could not complete.${end}"
     exit 1
   fi
-  echo -e "${grn}Modsec-sdbm-util build complete, proceeding with test.${end}\n"
+  success "Modsec-sdbm-util build complete, proceeding with test\n"
 fi
 
-echo -e "${cyn}Starting.${end}"
-if [[ ! -e "$PROJECT/data/data.pag" ]] || [[ ! -e "$PROJECT/data/data.dir" ]]; then
-  echo -e "${red}Starter data is required. Please create database in $PROJECT/data/data.{pag,dir}${end}"
-  exit 1
-fi
-
-mkdir -p $PROJECT/data
 mkdir -p $PROJECT/testdata
 mkdir -p $PROJECT/results
 
-echo -e "${cyn}Cleaning up an old data.${end}"
+info "Cleaning up any old data"
 rm -f $PROJECT/testdata/*
 rm -f $PROJECT/results/*
 
-echo -e "${cyn}Creating test data.${end}"
-for i in {1000..1500}; do zzuf -r 0.01 -s $i < $PROJECT/data/data.pag > $PROJECT/testdata/data$i.pag; cp $PROJECT/data/data.dir $PROJECT/testdata/data$i.dir; done
+# Extract begin and end locations for seed
+BEGIN=$(echo $RANGE | cut -d '-' -f1)
+END=$(echo $RANGE | cut -d '-' -f2)
 
-echo -e "${grn}Executing project against test data.${end}"
-for f in $PROJECT/testdata/*.pag; do echo "Testing $f"; timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -du $f; echo -e '\n'; done &>> $PROJECT/results/fuzzing.log
+info "${cyn}Running tests...${end}"
 
-echo -e "${grn}Done${end}"
+mkfuzz() {
+  zzuf -r 0.01 -s $1 < $DATAFILE.pag > $PROJECT/testdata/data$1.pag
+  cp $DATAFILE.dir $PROJECT/testdata/data$1.dir
+}
+
+cleanfuzz() {
+  rm -f $PROJECT/testdata/data$1.pag $PROJECT/testdata/data$1.dir
+}
+
+# Dump/Unpack action
+dump() {
+  for i in $(seq $BEGIN $END); do
+    mkfuzz $i
+    echo "Running dump test iteration $i"
+    timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -du $PROJECT/testdata/data$i
+    echo -e '\n'
+    cleanfuzz $i
+  done &>> $FUZZINGLOG
+}
+
+expired() {
+  for i in $(seq $BEGIN $END); do
+    mkfuzz $i
+    echo "Running expired test iteration $i"
+    timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -dx $PROJECT/testdata/data$i
+    echo -e '\n'
+    cleanfuzz $i
+  done &>> $FUZZINGLOG
+}
+
+shrink() {
+  for i in $(seq $BEGIN $END); do
+    mkfuzz $i
+    echo "Running expired test iteration $i"
+    timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -k $PROJECT/testdata/data$i
+    echo -e '\n'
+    cleanfuzz $i
+  done &>> $FUZZINGLOG
+}
+
+extract() {
+  for i in $(seq $BEGIN $END); do
+    mkfuzz $i
+    echo "Running expired test iteration $i"
+    timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -n $PROJECT/testdata/data$i -D $PROJECT/testdata/
+    echo -e '\n'
+    cleanfuzz $i
+    rm $PROJECT/testdata/new_db.*
+  done &>> $FUZZINGLOG
+}
+
+status() {
+  for i in $(seq $BEGIN $END); do
+    mkfuzz $i
+    echo "Running expired test iteration $i"
+    timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -s $PROJECT/testdata/data$i
+    echo -e '\n'
+    cleanfuzz $i
+  done &>> $FUZZINGLOG
+}
+
+# Run the specified action
+$ACTION
+
+success "Complete"
+
+# Show how many segfaults we hit
+sigsegvcount=$(grep -c Segmentation $FUZZINGLOG)
+[[ $sigsegvcount = 1 ]] && faults="fault" || faults="faults"
+success "Found $sigsegvcount Segmentation "$faults
+
+# Show how many AddressSanitizer messages we hit. In order to see these,
+# modsec-sdbm-util must be built with -fsanitize=address -ggdb in CFLAGS
+asancount=$(grep -c 'ERROR: AddressSanitizer' $FUZZINGLOG)
+[[ $asancount = 1 ]] && messages="message" || messages="messages"
+success "Found $asancount Address Sanitizer (libasan) "$messages
+
+success "Check $FUZZINGLOG"
