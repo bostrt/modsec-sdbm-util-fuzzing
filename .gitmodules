@@ -1,0 +1,3 @@
+[submodule "modsec-sdbm-util"]
+	path = modsec-sdbm-util
+	url = https://github.com/SpiderLabs/modsec-sdbm-util
