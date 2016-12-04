@@ -6,7 +6,7 @@
 Cleaning up any old data
 Running tests...
 Complete
-Found 1 Segmentation faults
+Found 1 Segmentation fault
 Found 0 Address Sanitizer (libasan) messages
 Check ./results/fuzzing.log
 ```
