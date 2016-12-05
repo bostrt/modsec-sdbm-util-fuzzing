@@ -116,7 +116,7 @@ dump() {
     timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -du $PROJECT/testdata/data$i
     echo -e '\n'
     cleanfuzz $i
-  done &>> $FUZZINGLOG
+  done
 }
 
 expired() {
@@ -126,7 +126,7 @@ expired() {
     timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -dx $PROJECT/testdata/data$i
     echo -e '\n'
     cleanfuzz $i
-  done &>> $FUZZINGLOG
+  done
 }
 
 shrink() {
@@ -136,7 +136,7 @@ shrink() {
     timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -k $PROJECT/testdata/data$i
     echo -e '\n'
     cleanfuzz $i
-  done &>> $FUZZINGLOG
+  done
 }
 
 extract() {
@@ -147,7 +147,7 @@ extract() {
     echo -e '\n'
     cleanfuzz $i
     rm $PROJECT/testdata/new_db.*
-  done &>> $FUZZINGLOG
+  done
 }
 
 status() {
@@ -157,11 +157,11 @@ status() {
     timeout 3 $PROJECT/modsec-sdbm-util/modsec-sdbm-util -s $PROJECT/testdata/data$i
     echo -e '\n'
     cleanfuzz $i
-  done &>> $FUZZINGLOG
+  done
 }
 
 # Run the specified action
-$ACTION
+$ACTION &>> $FUZZINGLOG
 
 success "Complete"
 
